@@ -13,27 +13,27 @@ from pynytimes import NYTAPI
 
 from config import *
 
-# Make sure to set parse dates to True so that the dates
-# are parsed into datetime.datetime or datetime.date objects
+
 nyt = NYTAPI(
     key=key,
     parse_dates=True,
 )
 
-# Search articles about President Biden
-#biden = nyt.article_search("biden")
 
-# You can optionally define the dates between which you want the articles to be
-#biden_january = nyt.article_search(
-#    query="Obama", dates={"begin": date(2021, 1, 1), "end": date(2021, 1, 31)}
-#)
+""" syntax 
+articles = nyt.article_search(
 
-# Optionally you can also define
-#biden = nyt.article_search(
-#    "biden",
-#)
+    query = "George Floyd protest",
 
-# You can optionally define the dates between which you want the articles to be
-obama_pres = nyt.article_search(dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)}
+    results = 100,
+
+    dates =date_dict,
+
+    options = options_dict)
+
+"""
+
+""" Search for articles within presency dates"""
+obama_pres = nyt.article_search(results = 200, dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
                                 
-trump_pres = nyt.article_search(dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)}
+trump_pres = nyt.article_search(query = 'Trump', dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
