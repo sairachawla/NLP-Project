@@ -6,6 +6,7 @@ Created on Tue Mar 21 15:32:51 2023
 @author: ameliasayes
 """
 
+
 pip install --upgrade pynytimes 
 
 from datetime import date, datetime
@@ -14,11 +15,12 @@ from pynytimes import NYTAPI
 from config import *
 
 
+key = key
+
 nyt = NYTAPI(
-    key=key,
+    key='M8zMmwpJDM3RUq2NdehtkyOjwMxHpZoc',
     parse_dates=True,
 )
-
 
 """ syntax 
 articles = nyt.article_search(
@@ -33,7 +35,8 @@ articles = nyt.article_search(
 
 """
 
+
 """ Search for articles within presency dates"""
-obama_pres = nyt.article_search(results = 200, dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
+obama_pres = nyt.article_search(query = 'Biden', dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
                                 
 trump_pres = nyt.article_search(query = 'Trump', dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
