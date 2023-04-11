@@ -152,12 +152,6 @@ classification('textblob_polarity_raw')
     
 """WORD CLOUD AND COUNT VECTORIZER"""
 
-import sklearn
-
-from sklearn.feature_extraction.text import CountVectorizer
-
-vec = CountVectorizer()
-
 """CREATE FUNCTION TO IDENTIFY TOP WORDS
 
 word_freq_dict = dict()
@@ -173,8 +167,14 @@ def TopWords(president, label, vectorizer, n=None):
     word_frequency = word_frequency[:n]
     return word_freq_dict"""
 
+import sklearn
+
+from sklearn.feature_extraction.text import CountVectorizer
+
+vec = CountVectorizer()
 
 """Pos words for Obama"""
+
 """"TopWords('Obama', 'pos', vec, n=None)
 obama_pos_top_words = word_frequency"""
 
@@ -186,22 +186,20 @@ bow = vec.transform(corpus)
 sum_words = bow.sum(axis = 0)
 word_frequency = [(word, sum_words[0, indx]) for word, indx in cnt_vect.vocabulary_.items()]
 word_frequency = sorted(word_frequency, key = lambda x: x[1], reverse=True)
-obama_pos_top = word_frequency[:] #top 20 words only
+obama_pos_top = word_frequency[:] #top 20 words only?
 
 obama_pos_top_words = list()
 for i in obama_pos_top:
     word = i[0]
     print(word)
-    obama_pos_top_words += (word)
+    obama_pos_top_words.append(word)
     
 str_obamapos = ' '.join(str(x) for x in obama_pos_top_words)
 
 
-
-
 #wordcloud generation
 pip install wordcloud
-from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from wordcloud import WordCloud
 
 wordcloud = WordCloud().generate(str_obamapos)
 
