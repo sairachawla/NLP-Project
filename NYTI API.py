@@ -7,6 +7,8 @@ Created on Tue Mar 21 15:32:51 2023
 """
 
 
+"""DATA IMPORT AND SETUP"""
+
 #pip install --upgrade pynytimes 
 
 from datetime import date, datetime
@@ -15,7 +17,7 @@ import pandas as pd
 
 from config import *
 
-key = key
+key = 'M8zMmwpJDM3RUq2NdehtkyOjwMxHpZoc'
 
 nyt = NYTAPI(
     key=key,
@@ -23,7 +25,7 @@ nyt = NYTAPI(
 )
 
 
-""" syntax 
+""" NYT API syntax for reference:
 articles = nyt.article_search(
 
     query = "George Floyd protest",
@@ -38,9 +40,12 @@ articles = nyt.article_search(
 
 
 """Search queries"""
-obama_pres = nyt.article_search(query = 'Obama', dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
+#limit to first term of presidency only
+#final results should be 1k minimum for each presidency
+
+obama_pres = nyt.article_search(query = 'Obama', results = 100, dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
                                 
-trump_pres = nyt.article_search(query = 'Trump', dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
+trump_pres = nyt.article_search(query = 'Trump', results = 100, dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
 
 
 """create dataframe"""
@@ -49,40 +54,28 @@ obama_df = pd.DataFrame(obama_abstracts, columns = ['abstract'])
 obama_df['president'] = 'Obama'
 
 
-
 trump_abstracts = [article['abstract'] for article in trump_pres]
 trump_df = pd.DataFrame(trump_abstracts, columns = ['abstract'])
 trump_df['president'] = 'Trump'
 
 
+#Merge dataframes
 all_df = pd.concat([obama_df, trump_df], axis = 0)
 
 
 
-"""Pre-processing"""
 """
+Pre-processing for sentiment analysis removed as per instructions from patrick
+
 def clean_text(str_in):
     import re
     tmp = re.sub("[^A-Za-z#!']+", " ",str_in).lower().strip()
     return tmp
 
 
-all_df["abstract_clean"] = all_df["abstract"].apply(clean_text)"""
+all_df["abstract_clean"] = all_df["abstract"].apply(clean_text)
 
-
-def rem_sw(var_in):
-    from nltk.corpus import stopwords
-    sw = stopwords.words("english")
-    tmp = var_in.split()
-    tmp_ar = [word_t for word_t in tmp if word_t not in sw]
-    tmp_o = ' '.join(tmp_ar)
-    return tmp_o
-
-
-all_df["abstract_sw"] = all_df["abstract"].apply(rem_sw)
-
-
-"""def stem_fun(txt_in):
+def stem_fun(txt_in):
     from nltk.stem import PorterStemmer
     stem_tmp = PorterStemmer()
     tmp = [stem_tmp.stem(word) for word in txt_in.split()]
@@ -92,7 +85,12 @@ all_df["abstract_sw"] = all_df["abstract"].apply(rem_sw)
     #     tmp.append(stem_tmp.stem(word))
     return tmp
 
-all_df["abstract_stem"] = all_df["abstract_sw"].apply(stem_fun)"""
+all_df["abstract_stem"] = all_df["abstract_sw"].apply(stem_fun)
+"""
+
+
+
+
 
 
 
@@ -106,12 +104,6 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 analyzer = SentimentIntensityAnalyzer()
 all_df["vader_polarity_raw"] = [analyzer.polarity_scores(row)["compound"] for row in all_df["abstract"]]
 
-#all_df["vader_clean"] = [analyzer.polarity_scores(a)["compound"] for a in all_df["abstract_clean"]]
-
-#all_df["vader_sw"] = [analyzer.polarity_scores(a)["compound"] for a in all_df["abstract_sw"]]
-
-#all_df["vader_stem"] = [analyzer.polarity_scores(a)["compound"] for a in all_df["abstract_stem"]]
-
 
 """2. TextBlob Sentiment Analyzer"""
 
@@ -120,17 +112,36 @@ all_df["vader_polarity_raw"] = [analyzer.polarity_scores(row)["compound"] for ro
 from textblob import TextBlob
 
 all_df["textblob_polarity_raw"] =  [TextBlob(row).sentiment.polarity for row in all_df["abstract"]]
-all_df["textblob_subjectivity_raw"] = [TextBlob(row).sentiment.subjectivity for row in all_df["abstract"]]
 
 
-"""3. Third Sentiment Analyzer?"""
-
-#flair, polyglot, pattern, stanza are not compatible with latest version of python
-
-
-
-"""Classify as Pos / Neg"""
+"""Average Sentiment Score"""
 import numpy as np
+avg_sent_score_textblob = all_df.groupby("president")['textblob_polarity_raw'].agg([np.min, np.max, sum, np.mean, np.median])
+print(avg_sent_score_textblob)
+#Results: mean for Obama articles is 0.066 vs. 0.050 for Trump, not a significant difference
+
+
+avg_sent_score_vader = all_df.groupby("president")['vader_polarity_raw'].agg([np.min, np.max, sum, np.mean, np.median])
+print(avg_sent_score_vader)
+#Results: Mean for Obama articles is 12.1 vs. 1.4 for Trump, significant difference
+
+"""
+Overall: Huge difference in results from the two methods, wonder why this is? 
+In both Obama has a higher sentiment, but this is marginal for textblob and not significant 
+Implication: methodology can alter results significantly for sentiment analysis
+"""
+
+
+
+
+
+
+
+
+
+
+"""CLASSIFY ABSTRACT AS POSITIVE OR NEGATIVE FROM SENTIMENT SCORE"""
+#create positive and negative classifications for each article abstract as labels for modelling
 
 #create function to classify
 def classification(column):
@@ -147,16 +158,66 @@ def classification(column):
 
 #TextBlob Classification Lables
 classification('textblob_polarity_raw')
+classification('vader_polarity_raw')
+
+
+
+
+
 
 
     
-"""WORD CLOUD AND COUNT VECTORIZER"""
+"""CREATING WORD CLOUDS WITH COUNT VECTORIZER"""
 
-"""CREATE FUNCTION TO IDENTIFY TOP WORDS
+"""
+in this code we use count vectorizer to identify the most common words in our four groups: 
+    1) Obama + positive sentiment
+    2) Obama + negative sentiment
+    3) Trump + positive sentiment
+    4) Trump + negative sentiment
+    
+    Method:
+        - Preprocess text to remove stop words - we don't want these included in our word clouds
+        - Extract all words in abstracts that fit the relevant category
+        - Fit count vectorizer and bag ow words to apply numerical code to words and sum counts for each word
+        - Create list of dictionary of words and their count
+        - Create a list of only the top 20 words 
+        - Convert this to a string
+        - Graph words in word cloud
+"""
 
-word_freq_dict = dict()
+
+"""Preprocessing for Count Vectorizer"""
+
+#remove stop words to prevent Them from being included in count vectorizer count
+def rem_sw(var_in):
+    from nltk.corpus import stopwords
+    sw = stopwords.words("english")
+    tmp = var_in.split()
+    tmp_ar = [word_t for word_t in tmp if word_t not in sw]
+    tmp_o = ' '.join(tmp_ar)
+    return tmp_o
+
+
+all_df["abstract_sw"] = all_df["abstract"].apply(rem_sw)
+
+
+
+"""import relevant modules and create function"""
+import sklearn
+from sklearn.feature_extraction.text import CountVectorizer
+
+vec = CountVectorizer()
+
+"""CREATE FUNCTION TO IDENTIFY TOP WORDS"""
+#pip install wordcloud
+
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
 def TopWords(president, label, vectorizer, n=None):
-    sub_df = all_df[(all_df["president"] == president) & (all_df["textblob_polarity_raw_classification"] == label)]
+    
+    sub_df = all_df[(all_df["president"] == president) & (all_df["vader_polarity_raw_classification"] == label)]
     corpus = list(sub_df['abstract_sw'])
     
     cnt_vect = vectorizer.fit(corpus)
@@ -164,67 +225,86 @@ def TopWords(president, label, vectorizer, n=None):
     sum_words = bow.sum(axis = 0)
     word_frequency = [(word, sum_words[0, indx]) for word, indx in cnt_vect.vocabulary_.items()]
     word_frequency = sorted(word_frequency, key = lambda x: x[1], reverse=True)
-    word_frequency = word_frequency[:n]
-    return word_freq_dict"""
+    top_words_list_of_dict = word_frequency[:n] #top 20 words only?
 
-import sklearn
-
-from sklearn.feature_extraction.text import CountVectorizer
-
-vec = CountVectorizer()
-
-"""Pos words for Obama"""
-
-""""TopWords('Obama', 'pos', vec, n=None)
-obama_pos_top_words = word_frequency"""
-
-sub_df = all_df[(all_df["president"] == "Obama") & (all_df["textblob_polarity_raw_classification"] == "pos")]
-corpus = list(sub_df['abstract_sw'])
+    top_words_list = list()
+    for i in top_words_list_of_dict:
+        word = i[0]
+        top_words_list.append(word)
     
-cnt_vect = vec.fit(corpus)
-bow = vec.transform(corpus)
-sum_words = bow.sum(axis = 0)
-word_frequency = [(word, sum_words[0, indx]) for word, indx in cnt_vect.vocabulary_.items()]
-word_frequency = sorted(word_frequency, key = lambda x: x[1], reverse=True)
-obama_pos_top = word_frequency[:] #top 20 words only?
-
-obama_pos_top_words = list()
-for i in obama_pos_top:
-    word = i[0]
-    print(word)
-    obama_pos_top_words.append(word)
+    str_top_words = ' '.join(str(x) for x in top_words_list)
     
-str_obamapos = ' '.join(str(x) for x in obama_pos_top_words)
+    return top_words_list_of_dict, str_top_words
+
+    #returning the top words list of dict so we can store the total count for each word
+    #returning the string of words to see what the top words are easily
 
 
-#wordcloud generation
-pip install wordcloud
-from wordcloud import WordCloud
 
-wordcloud = WordCloud().generate(str_obamapos)
+
+"""Top pos words for Obama"""
+obama_pos_top_words_count, obama_pos_top_words = TopWords('Obama', 'pos', vec, n=20)
+print(obama_pos_top_words_count) 
+print(obama_pos_top_words)
+
+#wordcloud
+wordcloud = WordCloud().generate(obama_pos_top_words)
 
 plt.imshow(wordcloud, interpolation='bilinear')
 plt.axis("off")
 plt.show()
 
+
     
 """Neg words for Obama"""
-TopWords('Obama', 'neg', vec, n=None)
-obama_neg_top_words = word_frequency
+obama_neg_top_words_count, obama_neg_top_words = TopWords('Obama', 'neg', vec, n=20)
+print(obama_neg_top_words_count)
+print(obama_neg_top_words)
+
+#wordcloud
+wordcloud = WordCloud().generate(obama_neg_top_words)
+
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.show()
+
 
 """Pos words for Trump"""
-TopWords('Trump', 'pos', vec, n=None)
-trump_pos_top_words = word_frequency
+trump_pos_top_words_count, trump_pos_top_words = TopWords('Trump', 'pos', vec, n=20)
+print(trump_pos_top_words_count)
+print(trump_pos_top_words)
+
+#wordcloud
+wordcloud = WordCloud().generate(trump_pos_top_words)
+
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.show()
+
 
 """Neg words for Trump"""
-TopWords('Trump', 'neg', vec, n=None)
-trump_neg_top_words = word_frequency
+trump_neg_top_words_count, trump_neg_top_words = TopWords('Trump', 'neg', vec, n=20)
+print(trump_neg_top_words_count)
+print(trump_neg_top_words)
+
+#wordcloud
+wordcloud = WordCloud().generate(trump_neg_top_words)
+
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.show()
 
 
 
-"""MODELLING APPROACH - Saira"""
 
 
+
+
+
+"""MODELLING APPROACH - Saira to complete"""
+
+"""Add a Column that is presient + classification"""
+all_df["classification_for_modelling"] = all_df["president"] + " " + all_df["textblob_polarity_raw_classification"]
 
 """
 TFIDF
