@@ -15,7 +15,7 @@ from datetime import date, datetime
 from pynytimes import NYTAPI
 import pandas as pd
 
-from config import *
+#from config import *
 
 key = 'M8zMmwpJDM3RUq2NdehtkyOjwMxHpZoc'
 
@@ -43,6 +43,7 @@ articles = nyt.article_search(
 #limit to first term of presidency only
 #final results should be 1k minimum for each presidency
 
+## WHAT ARE THE CORRECT DATES?
 obama_pres = nyt.article_search(query = 'Obama', results = 100, dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
                                 
 trump_pres = nyt.article_search(query = 'Trump', results = 100, dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
@@ -61,7 +62,7 @@ trump_df['president'] = 'Trump'
 
 #Merge dataframes
 all_df = pd.concat([obama_df, trump_df], axis = 0)
-
+all_df = all_df.reset_index()
 
 
 """
@@ -294,11 +295,7 @@ plt.imshow(wordcloud, interpolation='bilinear')
 plt.axis("off")
 plt.show()
 
-
-
-
-
-
+## ANOTHER WORD CLOUD VISUALIZATION COULD BE TO REMOVE THE WORDS THAT APPEAR IN ALL CLASSES AND SEE DIFFERENT WORDS
 
 
 """MODELLING APPROACH - Saira to complete"""
@@ -306,14 +303,108 @@ plt.show()
 """Add a Column that is presient + classification"""
 all_df["classification_for_modelling"] = all_df["president"] + " " + all_df["textblob_polarity_raw_classification"]
 
-"""
-TFIDF
+
+"""TFIDF"""
+
+## data preprocessing
+
+## preprcoessing functions to apply
+def clean_text(str_in):
+    import re
+    tmp = re.sub("[^A-Za-z#']+", " ",str_in).lower().strip()
+    return tmp
+
+def rem_sw(var_in):
+    from nltk.corpus import stopwords
+    sw = stopwords.words("english")
+    tmp = var_in.split()
+    # tmp_ar = list()
+    # for word_t in tmp:
+    #     if word_t not in sw:
+    #         tmp_ar.append(word_t)
+    tmp_ar = [word_t for word_t in tmp if word_t not in sw]
+    tmp_o = ' '.join(tmp_ar)
+    return tmp_o
+
+def stem_fun(txt_in):
+    from nltk.stem import PorterStemmer
+    stem_tmp = PorterStemmer()
+    tmp = [stem_tmp.stem(word) for word in txt_in.split()]
+    tmp = ' '.join(tmp)
+    # tmp = list()
+    # for word in txt_in.split():
+    #     tmp.append(stem_tmp.stem(word))
+    return tmp
+
+## apply functions
+all_df['abstract_clean'] = all_df['abstract'].apply(clean_text)
+all_df['abstract_sw'] = all_df['abstract_clean'].apply(rem_sw)
+all_df['abstract_stem'] = all_df['abstract_sw'].apply(stem_fun)
+
+## since the signal is higher for against stance tweets, we are balancing the data 
+# =============================================================================
+# df_majority = all_df[all_df['classification_for_modelling'] == 'Trump neutral']
+# df_minority1 = all_df[all_df['classification_for_modelling'] == 'NONE']
+# df_minority2 = all_df[all_df['classification_for_modelling'] == 'FAVOR']
+# df_minority2 = all_df[all_df['classification_for_modelling'] == 'FAVOR']
+# 
+# df_minority1_upsampled = resample(df_minority1,
+#                                   replace=True,
+#                                   n_samples = all_df['classification_for_modelling'].value_counts()['AGAINST'],
+#                                   random_state=42)
+# df_minority2_upsampled = resample(df_minority2,
+#                                   replace=True,
+#                                   n_samples = all_df['classification_for_modelling'].value_counts()['AGAINST'],
+#                                   random_state=42)
+# =============================================================================
+
+#df = pd.concat([df_majority, df_minority1_upsampled, df_minority2_upsampled])
+
+# split the dataset into training and testing sets
+from sklearn.model_selection import train_test_split, GridSearchCV
+
+X_train, X_test, y_train, y_test = train_test_split(all_df['abstract'], all_df['classification_for_modelling'], test_size=0.2, random_state=42)
+
+# vectorization
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 xform = TfidfVectorizer(ngram_range=(1, 1))
-xform_df_obama = pd.DataFrame(xform.fit_transform(obama_df['abstract']).toarray())
-xform_df_obama.columns = xform.get_feature_names()
+xform_train_df = pd.DataFrame(xform.fit_transform(X_train).toarray())
+xform_train_df.columns = xform.get_feature_names_out()
+xform_test_df = xform.transform(X_test)
 
-xform_df_trump = pd.DataFrame(xform.fit_transform(trump_df['abstract']).toarray())
-xform_df_trump.columns = xform.get_feature_names()"""
+# modeling with gridsearchcv
+from sklearn.ensemble import RandomForestClassifier
+rfc = RandomForestClassifier()
+# define hyperparameters to tune
+param_grid = {
+    'n_estimators': [50, 100, 200],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4]
+}
+
+# perform grid search cross-validation to find best hyperparameters
+grid_search = GridSearchCV(rfc, param_grid=param_grid, cv=5)
+grid_search.fit(xform_train_df, y_train)
+
+# print best hyperparameters
+print("Best hyperparameters: ", grid_search.best_params_)
+
+# use best hyperparameters to train and evaluate model on test set
+best_rfc = grid_search.best_estimator_
+best_rfc.fit(xform_train_df, y_train)
+accuracy = best_rfc.score(xform_test_df, y_test)
+
+# print test set accuracy
+print("Test set accuracy: {:.2f}".format(accuracy))
+
+
+
+
+
+
+
+
+
 
