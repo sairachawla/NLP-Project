@@ -40,13 +40,11 @@ articles = nyt.article_search(
 
 
 """Search queries"""
-#limit to first term of presidency only
+#dates limited to first term of presidency only
 #final results should be 1k minimum for each presidency
-
-## WHAT ARE THE CORRECT DATES?
-obama_pres = nyt.article_search(query = 'Obama', results = 100, dates={"begin": date(2009, 1, 20), "end": date(2017, 1, 20)})
+obama_pres = nyt.article_search(query = 'Obama', results = 1000, dates={"begin": date(2009, 1, 20), "end": date(2013, 1, 19)})
                                 
-trump_pres = nyt.article_search(query = 'Trump', results = 100, dates={"begin": date(2017, 1, 21), "end": date(2020, 1, 20)})
+trump_pres = nyt.article_search(query = 'Trump', results = 1000, dates={"begin": date(2017, 1, 20), "end": date(2020, 1, 19)})
 
 
 """create dataframe"""
@@ -113,6 +111,7 @@ all_df["vader_polarity_raw"] = [analyzer.polarity_scores(row)["compound"] for ro
 from textblob import TextBlob
 
 all_df["textblob_polarity_raw"] =  [TextBlob(row).sentiment.polarity for row in all_df["abstract"]]
+#add in subjectivity for texblob as well 
 
 
 """Average Sentiment Score"""
@@ -126,6 +125,8 @@ avg_sent_score_vader = all_df.groupby("president")['vader_polarity_raw'].agg([np
 print(avg_sent_score_vader)
 #Results: Mean for Obama articles is 12.1 vs. 1.4 for Trump, significant difference
 
+
+#add in textblob subjectiviy analysis
 """
 Overall: Huge difference in results from the two methods, wonder why this is? 
 In both Obama has a higher sentiment, but this is marginal for textblob and not significant 
@@ -133,8 +134,7 @@ Implication: methodology can alter results significantly for sentiment analysis
 """
 
 
-
-
+#graph results
 
 
 
