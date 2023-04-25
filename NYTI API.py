@@ -11,13 +11,13 @@ Created on Tue Mar 21 15:32:51 2023
 
 #pip install --upgrade pynytimes 
 
-from datetime import date, datetime
+import os
+os.chdir('/Users/ameliasayes/Documents/QMSS/QMSS - Spring/NLP/NLP Project Data/NLP-Project')
+
 from pynytimes import NYTAPI
 import pandas as pd
 
-#from config import *
-
-key = 'M8zMmwpJDM3RUq2NdehtkyOjwMxHpZoc'
+from config import *
 
 nyt = NYTAPI(
     key=key,
@@ -42,15 +42,16 @@ articles = nyt.article_search(
 """Search queries"""
 #dates limited to first term of presidency only
 #final results should be 1k minimum for each presidency
-obama_pres = nyt.article_search(query = 'Obama', results = 1000, dates={"begin": date(2009, 1, 20), "end": date(2013, 1, 19)})
+obama_pres = nyt.article_search(query = 'Obama', results = 2100, dates={"begin": date(2009, 1, 20), "end": date(2013, 1, 19)})
                                 
-trump_pres = nyt.article_search(query = 'Trump', results = 1000, dates={"begin": date(2017, 1, 20), "end": date(2020, 1, 19)})
+trump_pres = nyt.article_search(query = 'Trump', results = 2100, dates={"begin": date(2017, 1, 20), "end": date(2020, 1, 19)})
+
 
 
 """create dataframe"""
 obama_abstracts = [article['abstract'] for article in obama_pres]
-obama_df = pd.DataFrame(obama_abstracts, columns = ['abstract'])
-obama_df['president'] = 'Obama'
+all_df = pd.DataFrame(obama_abstracts, columns = ['abstract'])
+all_df['president'] = 'Obama'
 
 
 trump_abstracts = [article['abstract'] for article in trump_pres]
@@ -89,11 +90,6 @@ all_df["abstract_stem"] = all_df["abstract_sw"].apply(stem_fun)
 
 
 
-
-
-
-
-
 """SEENTIMENT ANALYSIS"""
 
 """1. VaderSentiment / NLTK"""
@@ -102,6 +98,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 analyzer = SentimentIntensityAnalyzer()
 all_df["vader_polarity_raw"] = [analyzer.polarity_scores(row)["compound"] for row in all_df["abstract"]]
+
 
 
 """2. TextBlob Sentiment Analyzer"""
@@ -113,20 +110,35 @@ from textblob import TextBlob
 all_df["textblob_polarity_raw"] =  [TextBlob(row).sentiment.polarity for row in all_df["abstract"]]
 #add in subjectivity for texblob as well 
 
+all_df["textblob_subjectivity_raw"] = [TextBlob(row).sentiment.subjectivity for row in all_df["abstract"]]
+
+
+
 
 """Average Sentiment Score"""
 import numpy as np
-avg_sent_score_textblob = all_df.groupby("president")['textblob_polarity_raw'].agg([np.min, np.max, sum, np.mean, np.median])
-print(avg_sent_score_textblob)
+
+#text blob polarity
+sent_score_textblob_metrics = all_df.groupby("president")['textblob_polarity_raw'].agg([np.mean, np.median, np.std, np.min, np.max])
+print("Texblob Polarity Scores")
+print(sent_score_textblob_metrics)
 #Results: mean for Obama articles is 0.066 vs. 0.050 for Trump, not a significant difference
 
 
-avg_sent_score_vader = all_df.groupby("president")['vader_polarity_raw'].agg([np.min, np.max, sum, np.mean, np.median])
-print(avg_sent_score_vader)
+#text blob subjectivity
+subj_score_textblob_metrics = all_df.groupby("president")['textblob_subjectivity_raw'].agg([np.mean, np.median, np.std, np.min, np.max])
+print("TextBlob Subjectivity Scores")
+print(subj_score_textblob_metrics)
+
+
+#vader polarity
+sent_score_vader_metrics = all_df.groupby("president")['vader_polarity_raw'].agg([np.mean, np.median, np.std, np.min, np.max])
+print("Vader Polarity Scores")
+print(sent_score_vader_metrics)
 #Results: Mean for Obama articles is 12.1 vs. 1.4 for Trump, significant difference
 
 
-#add in textblob subjectiviy analysis
+
 """
 Overall: Huge difference in results from the two methods, wonder why this is? 
 In both Obama has a higher sentiment, but this is marginal for textblob and not significant 
@@ -134,10 +146,27 @@ Implication: methodology can alter results significantly for sentiment analysis
 """
 
 
-#graph results
+#bar charts of average result
+import matplotlib.pyplot as plt
+x1 = all_df.groupby("president")['textblob_polarity_raw'].mean()
+x2 = all_df.groupby("president")['textblob_subjectivity_raw'].mean()
+x3 = all_df.groupby("president")['vader_polarity_raw'].mean()
+
+x1.plot(kind="bar", title = "textblob polarity sentiment scores")
+x2.plot(kind="bar", title = "textblob subjectivity sentiment scores")
+x3.plot(kind="bar", title = "vader polarity sentiment scores")
 
 
 
+#box plot of distributions
+import seaborn as sns
+
+tb_polar_bp = sns.boxplot(x='president', y = 'textblob_polarity_raw', data = all_df)
+tb_polar_bp
+
+tb_subj_bp = sns.boxplot(x='president', y = 'textblob_subjectivity_raw', data = all_df)
+
+vs_polar_bp  = sns.boxplot(x='president', y = 'vader_polarity_raw', data = all_df)
 
 
 
@@ -160,10 +189,6 @@ def classification(column):
 #TextBlob Classification Lables
 classification('textblob_polarity_raw')
 classification('vader_polarity_raw')
-
-
-
-
 
 
 
@@ -300,9 +325,13 @@ plt.show()
 
 """MODELLING APPROACH - Saira to complete"""
 
+all_df.columns
+
 """Add a Column that is presient + classification"""
 all_df["classification_for_modelling"] = all_df["president"] + " " + all_df["textblob_polarity_raw_classification"]
 
+"""counts for each category"""
+all_df.groupby('classification_for_modelling').size()
 
 """TFIDF"""
 
