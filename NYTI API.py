@@ -50,7 +50,7 @@ trump_pres = nyt.article_search(query = 'Trump', results = 2100, dates={"begin":
 
 """create dataframe"""
 obama_abstracts = [article['abstract'] for article in obama_pres]
-all_df = pd.DataFrame(obama_abstracts, columns = ['abstract'])
+obama_df = pd.DataFrame(obama_abstracts, columns = ['abstract'])
 all_df['president'] = 'Obama'
 
 
@@ -325,10 +325,16 @@ plt.show()
 
 """MODELLING APPROACH - Saira to complete"""
 
+"""for saira to run on her local machine"""
+os.chdir('/Users/sairachawla/Developer/GR5067/nlp_project/NLP-Project')
+obama_df = pd.read_csv('obama_dataframe.csv')
+trump_df = pd.read_csv('trump_dataframe.csv')
+
 all_df.columns
 
 """Add a Column that is presient + classification"""
 all_df["classification_for_modelling"] = all_df["president"] + " " + all_df["textblob_polarity_raw_classification"]
+
 
 """counts for each category"""
 all_df.groupby('classification_for_modelling').size()
@@ -370,29 +376,46 @@ all_df['abstract_clean'] = all_df['abstract'].apply(clean_text)
 all_df['abstract_sw'] = all_df['abstract_clean'].apply(rem_sw)
 all_df['abstract_stem'] = all_df['abstract_sw'].apply(stem_fun)
 
-## since the signal is higher for against stance tweets, we are balancing the data 
-# =============================================================================
-# df_majority = all_df[all_df['classification_for_modelling'] == 'Trump neutral']
-# df_minority1 = all_df[all_df['classification_for_modelling'] == 'NONE']
-# df_minority2 = all_df[all_df['classification_for_modelling'] == 'FAVOR']
-# df_minority2 = all_df[all_df['classification_for_modelling'] == 'FAVOR']
-# 
-# df_minority1_upsampled = resample(df_minority1,
-#                                   replace=True,
-#                                   n_samples = all_df['classification_for_modelling'].value_counts()['AGAINST'],
-#                                   random_state=42)
-# df_minority2_upsampled = resample(df_minority2,
-#                                   replace=True,
-#                                   n_samples = all_df['classification_for_modelling'].value_counts()['AGAINST'],
-#                                   random_state=42)
-# =============================================================================
+## since the signal is higher for neutral, we are balancing the data 
 
-#df = pd.concat([df_majority, df_minority1_upsampled, df_minority2_upsampled])
+from sklearn.utils import resample
+
+df_majority = all_df[all_df['classification_for_modelling'] == 'Trump neutral']
+df_minority1 = all_df[all_df['classification_for_modelling'] == 'Obama neutral']
+df_minority2 = all_df[all_df['classification_for_modelling'] == 'Trump pos']
+df_minority3 = all_df[all_df['classification_for_modelling'] == 'Obama pos']
+df_minority4 = all_df[all_df['classification_for_modelling'] == 'Trump neg']
+df_minority5 = all_df[all_df['classification_for_modelling'] == 'Obama neg']
+
+df_minority1_upsampled = resample(df_minority1,
+                                  replace=True,
+                                  n_samples = all_df['classification_for_modelling'].value_counts()['Trump neutral'],
+                                  random_state=42)
+df_minority2_upsampled = resample(df_minority2,
+                                  replace=True,
+                                  n_samples = all_df['classification_for_modelling'].value_counts()['Trump neutral'],
+                                  random_state=42)
+df_minority3_upsampled = resample(df_minority3,
+                                  replace=True,
+                                  n_samples = all_df['classification_for_modelling'].value_counts()['Trump neutral'],
+                                  random_state=42)
+df_minority4_upsampled = resample(df_minority4,
+                                  replace=True,
+                                  n_samples = all_df['classification_for_modelling'].value_counts()['Trump neutral'],
+                                  random_state=42)
+df_minority5_upsampled = resample(df_minority5,
+                                  replace=True,
+                                  n_samples = all_df['classification_for_modelling'].value_counts()['Trump neutral'],
+                                  random_state=42)
+
+all_df = pd.concat([df_majority, df_minority1_upsampled, df_minority2_upsampled, df_minority3_upsampled, df_minority4_upsampled, df_minority5_upsampled])
+all_df.reset_index(inplace=True)
+all_df.drop(['level_0', 'index', 'Unnamed: 0'], axis=1,inplace=True)
 
 # split the dataset into training and testing sets
 from sklearn.model_selection import train_test_split, GridSearchCV
 
-X_train, X_test, y_train, y_test = train_test_split(all_df['abstract'], all_df['classification_for_modelling'], test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(all_df['abstract_stem'], all_df['classification_for_modelling'], test_size=0.2, random_state=42)
 
 # vectorization
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -424,16 +447,38 @@ print("Best hyperparameters: ", grid_search.best_params_)
 best_rfc = grid_search.best_estimator_
 best_rfc.fit(xform_train_df, y_train)
 accuracy = best_rfc.score(xform_test_df, y_test)
+predictions = best_rfc.predict(xform_test_df)
 
 # print test set accuracy
 print("Test set accuracy: {:.2f}".format(accuracy))
+from sklearn.metrics import precision_score, recall_score
+precision = precision_score(y_test, predictions, average='macro')
+recall = recall_score(y_test, predictions, average='macro')
+print("Precision: {:.2f}".format(precision))
+print("Recall: {:.2f}".format(recall))
 
 
+## Saira visualizations
+all_df['classification_for_modelling'].hist()
 
+y_test.hist()
+pd.Series(list(predictions)).hist(alpha=0.75)
+plt.xticks(rotation=45)
+plt.xlabel('Class')
+plt.ylabel('Count')
+plt.legend(['True Class', 'Predicted Class'], bbox_to_anchor=(1.05, 1.0), loc='upper left')
 
-
-
-
-
+# =============================================================================
+# from sklearn.metrics import roc_curve, auc
+# probs = best_rfc.predict_proba(xform_test_df)
+# preds = probs[:, 1] 
+# 
+# # calculate false positive rate, true positive rate, and threshold
+# fpr, tpr, thresholds = roc_curve(y_test, preds)
+# 
+# # calculate area under the curve (AUC)
+# roc_auc = auc(fpr, tpr)
+# 
+# =============================================================================
 
 
