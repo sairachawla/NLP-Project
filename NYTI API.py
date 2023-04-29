@@ -456,6 +456,12 @@ precision = precision_score(y_test, predictions, average='macro')
 recall = recall_score(y_test, predictions, average='macro')
 print("Precision: {:.2f}".format(precision))
 print("Recall: {:.2f}".format(recall))
+from sklearn.model_selection import cross_val_score
+import numpy as np
+cv_scores = cross_val_score(best_rfc, xform_train_df, y_train, cv=5)
+print("Cross Validation Score: {:.2f}".format(np.mean(cv_scores)))
+
+
 
 
 ## Saira visualizations
